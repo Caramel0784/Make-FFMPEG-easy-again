@@ -70,7 +70,11 @@ function showLog(text) {
 }
 function setDownload(filename) {
   const area = document.getElementById("download_area");
-  area.innerHTML = `<a href="/outputs/${filename}" download>⬇️ Download result (${filename})</a>`;
+  area.innerHTML = `<button class="run-btn" onclick="revealFile('${filename}')">📂 Open folder (${filename})</button>`;
+}
+
+async function revealFile(filename) {
+  await fetch(`/reveal/${filename}`, { method: "POST" });
 }
 function clearDownload() {
   document.getElementById("download_area").innerHTML = "";
