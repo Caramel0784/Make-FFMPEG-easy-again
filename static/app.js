@@ -64,7 +64,9 @@ function showCmd(cmdStr) {
   document.getElementById("cmd_preview").textContent = cmdStr;
 }
 function showLog(text) {
-  document.getElementById("log_output").textContent = text;
+  const el = document.getElementById("log_output");
+  el.textContent = text;
+  el.scrollTop = el.scrollHeight;
 }
 function setDownload(filename) {
   const area = document.getElementById("download_area");
