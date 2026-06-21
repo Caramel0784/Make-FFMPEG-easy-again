@@ -119,9 +119,25 @@ def cancel(job_id):
     return jsonify({"ok": True})
 
 
-@app.route("/outputs/<path:filename>")
-def get_output(filename):
-    return send_from_directory(OUTPUT_DIR, filename, as_attachment=True)
+import platform
+
+@app.route("/reveal/<path:filename>", methods=["POST"])
+def reveal(filename):
+    """Open the system file explorer and highlight the output file (no copying)."""
+    full_path = os.path.join(OUTPUT_DIR, filename)
+    if not os.path.exists(full_path):
+        return jsonify({"error": "file not found"}), 404
+    try:
+        system = platform.system()
+        if system == "Windows":
+            subprocess.run(["explorer", "/select,", full_path])
+        elif system == "Darwin":
+            subprocess.run(["open", "-R", full_path])
+        else:
+            subprocess.run(["xdg-open", OUTPUT_DIR])
+        return jsonify({"ok": True, "path": full_path})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/uploads/<path:filename>")
