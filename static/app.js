@@ -357,6 +357,31 @@ async function subsRun() {
   } catch (e) { showLog("Error: " + e.message); }
 }
 
+// ---------- MIX AUDIO TRACKS ----------
+function renderMixTrackList() {
+  const count = parseInt(document.getElementById("mix_count").value) || 2;
+  const list = document.getElementById("mix_track_list");
+  list.textContent = `Will mix audio tracks index 0 through ${count - 1} (i.e. track 1 to track ${count} as shown in most players).`;
+}
+renderMixTrackList();
+
+async function mixTracksRun() {
+  try {
+    const inPath = await resolvePath(document.getElementById("mix_file"));
+    const count = parseInt(document.getElementById("mix_count").value) || 2;
+    const normalize = document.getElementById("mix_normalize").checked ? 1 : 0;
+    const { path: outPath, filename } = await newOutput("mp4");
+
+    let inputs = "";
+    for (let i = 0; i < count; i++) inputs += `[0:a:${i}]`;
+    const filter = `${inputs}amix=inputs=${count}:normalize=${normalize}[a]`;
+
+    const args = ["-i", inPath, "-filter_complex", filter,
+      "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", outPath];
+    runFfmpeg(args, filename);
+  } catch (e) { showLog("Error: " + e.message); }
+}
+
 // ---------- CUSTOM ----------
 async function customRun() {
   try {
