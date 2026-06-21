@@ -42,6 +42,8 @@ you'll pick up the command-line syntax too.
 
 4. Open your browser to **http://127.0.0.1:5000**
 
+# Auto
+- **open run.bat**
 ## Notes
 - Uploaded files are saved into `uploads/`, results into `outputs/`. Both are
   ignored by nothing automatically — clear them out periodically if disk space matters.
