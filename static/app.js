@@ -8,6 +8,38 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
   });
 });
 
+// ---------- Local path mode (no upload needed) ----------
+// Auto-inject a "or paste local file path" field under every <input type=file>
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll('input[type=file]').forEach(fileInput => {
+    const wrap = document.createElement("div");
+    wrap.className = "path-alt";
+    wrap.innerHTML = `
+      <div class="path-alt-divider">or paste a full file path (skips uploading):</div>
+      <input type="text" class="path-text" placeholder="C:\\Videos\\clip.mp4">`;
+    fileInput.insertAdjacentElement("afterend", wrap);
+  });
+});
+
+// Resolve a file input to a usable server-side path:
+// - if its paired "path-text" field has a value, validate it via /check_path (no copy)
+// - otherwise upload the chosen file
+async function resolvePath(inputEl) {
+  const pathField = inputEl.parentElement.querySelector(".path-text");
+  const typedPath = pathField ? pathField.value.trim() : "";
+  if (typedPath) {
+    const res = await fetch("/check_path", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: typedPath })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    return data.path;
+  }
+  return uploadFile(inputEl);
+}
+
 // ---------- Upload helper ----------
 async function uploadFile(inputEl) {
   if (!inputEl.files || !inputEl.files[0]) throw new Error("Please choose a file first.");
@@ -32,7 +64,9 @@ function showCmd(cmdStr) {
   document.getElementById("cmd_preview").textContent = cmdStr;
 }
 function showLog(text) {
-  document.getElementById("log_output").textContent = text;
+  const el = document.getElementById("log_output");
+  el.textContent = text;
+  el.scrollTop = el.scrollHeight;
 }
 function setDownload(filename) {
   const area = document.getElementById("download_area");
@@ -89,7 +123,7 @@ async function cancelJob() {
 // ---------- TRIM ----------
 async function trimRun() {
   try {
-    const inPath = await uploadFile(document.getElementById("trim_file"));
+    const inPath = await resolvePath(document.getElementById("trim_file"));
     const start = document.getElementById("trim_start").value || "00:00:00";
     const end = document.getElementById("trim_end").value;
     const reencode = document.getElementById("trim_reencode").checked;
@@ -112,10 +146,14 @@ async function trimRun() {
 let mergeFiles = [];
 async function addToMergeList() {
   try {
-    const path = await uploadFile(document.getElementById("merge_file"));
-    const name = document.getElementById("merge_file").files[0].name;
+    const fileInput = document.getElementById("merge_file");
+    const path = await resolvePath(fileInput);
+    const pathField = fileInput.parentElement.querySelector(".path-text");
+    const name = (pathField && pathField.value.trim()) ? path.split(/[\\/]/).pop() : fileInput.files[0].name;
     mergeFiles.push({ path, name });
     renderMergeList();
+    fileInput.value = "";
+    if (pathField) pathField.value = "";
   } catch (e) { showLog("Error: " + e.message); }
 }
 function renderMergeList() {
@@ -161,8 +199,8 @@ async function mergeRun() {
 // ---------- MERGE AUDIO + VIDEO ----------
 async function avRun() {
   try {
-    const videoPath = await uploadFile(document.getElementById("av_video"));
-    const audioPath = await uploadFile(document.getElementById("av_audio"));
+    const videoPath = await resolvePath(document.getElementById("av_video"));
+    const audioPath = await resolvePath(document.getElementById("av_audio"));
     const mode = document.getElementById("av_mode").value;
     const shortest = document.getElementById("av_shortest").checked;
     const { path: outPath, filename } = await newOutput("mp4");
@@ -184,7 +222,7 @@ async function avRun() {
 // ---------- EXTRACT AUDIO ----------
 async function extractRun() {
   try {
-    const inPath = await uploadFile(document.getElementById("ext_file"));
+    const inPath = await resolvePath(document.getElementById("ext_file"));
     const fmt = document.getElementById("ext_format").value;
     const { path: outPath, filename } = await newOutput(fmt);
     const codec = fmt === "mp3" ? "libmp3lame" : fmt === "aac" ? "aac" : fmt === "flac" ? "flac" : fmt === "ogg" ? "libvorbis" : "pcm_s16le";
@@ -196,7 +234,7 @@ async function extractRun() {
 // ---------- CONVERT ----------
 async function convertRun() {
   try {
-    const inPath = await uploadFile(document.getElementById("conv_file"));
+    const inPath = await resolvePath(document.getElementById("conv_file"));
     const fmt = document.getElementById("conv_format").value;
     const { path: outPath, filename } = await newOutput(fmt);
     const args = ["-i", inPath, outPath];
@@ -207,7 +245,7 @@ async function convertRun() {
 // ---------- COMPRESS / RESIZE ----------
 async function compressRun() {
   try {
-    const inPath = await uploadFile(document.getElementById("comp_file"));
+    const inPath = await resolvePath(document.getElementById("comp_file"));
     const crf = document.getElementById("comp_crf").value;
     const scale = document.getElementById("comp_scale").value;
     const { path: outPath, filename } = await newOutput("mp4");
@@ -221,7 +259,7 @@ async function compressRun() {
 // ---------- SPEED ----------
 async function speedRun() {
   try {
-    const inPath = await uploadFile(document.getElementById("spd_file"));
+    const inPath = await resolvePath(document.getElementById("spd_file"));
     const speed = parseFloat(document.getElementById("spd_val").value);
     const matchAudio = document.getElementById("spd_audio").checked;
     const { path: outPath, filename } = await newOutput("mp4");
@@ -253,7 +291,7 @@ async function speedRun() {
 // ---------- ROTATE ----------
 async function rotateRun() {
   try {
-    const inPath = await uploadFile(document.getElementById("rot_file"));
+    const inPath = await resolvePath(document.getElementById("rot_file"));
     const action = document.getElementById("rot_action").value;
     const { path: outPath, filename } = await newOutput("mp4");
     const map = {
@@ -271,7 +309,7 @@ async function rotateRun() {
 // ---------- GIF ----------
 async function gifRun() {
   try {
-    const inPath = await uploadFile(document.getElementById("gif_file"));
+    const inPath = await resolvePath(document.getElementById("gif_file"));
     const start = document.getElementById("gif_start").value || "00:00:00";
     const dur = document.getElementById("gif_dur").value || "3";
     const width = document.getElementById("gif_width").value || "480";
@@ -287,7 +325,7 @@ async function gifRun() {
 // ---------- SCREENSHOT ----------
 async function thumbRun() {
   try {
-    const inPath = await uploadFile(document.getElementById("thumb_file"));
+    const inPath = await resolvePath(document.getElementById("thumb_file"));
     const time = document.getElementById("thumb_time").value || "00:00:01";
     const { path: outPath, filename } = await newOutput("png");
     const args = ["-ss", time, "-i", inPath, "-frames:v", "1", outPath];
@@ -298,8 +336,8 @@ async function thumbRun() {
 // ---------- SUBTITLES ----------
 async function subsRun() {
   try {
-    const videoPath = await uploadFile(document.getElementById("sub_video"));
-    const subPath = await uploadFile(document.getElementById("sub_file"));
+    const videoPath = await resolvePath(document.getElementById("sub_video"));
+    const subPath = await resolvePath(document.getElementById("sub_file"));
     const mode = document.getElementById("sub_mode").value;
     if (mode === "burn") {
       const { path: outPath, filename } = await newOutput("mp4");
@@ -321,8 +359,10 @@ async function customRun() {
     const f1 = document.getElementById("cust_file1");
     const f2 = document.getElementById("cust_file2");
     let in1 = "", in2 = "";
-    if (f1.files[0]) in1 = await uploadFile(f1);
-    if (f2.files[0]) in2 = await uploadFile(f2);
+    const path1Field = f1.parentElement.querySelector(".path-text");
+    const path2Field = f2.parentElement.querySelector(".path-text");
+    if (f1.files[0] || (path1Field && path1Field.value.trim())) in1 = await resolvePath(f1);
+    if (f2.files[0] || (path2Field && path2Field.value.trim())) in2 = await resolvePath(f2);
     const ext = document.getElementById("cust_ext").value || "mp4";
     const { path: outPath, filename } = await newOutput(ext);
     let template = document.getElementById("cust_args").value;

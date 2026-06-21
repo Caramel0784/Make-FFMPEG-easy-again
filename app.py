@@ -20,7 +20,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 4 * 1024 * 1024 * 1024  # 4GB uploads
+app.config["MAX_CONTENT_LENGTH"] = None  # no upload size limit
 
 # track running jobs: job_id -> dict(proc, log, status, output_file)
 JOBS = {}
@@ -136,6 +136,18 @@ def new_output(ext):
     return jsonify({"path": p, "filename": os.path.basename(p)})
 
 
+@app.route("/check_path", methods=["POST"])
+def check_path():
+    """Validate that a locally-typed file path exists, without copying it."""
+    data = request.get_json(force=True)
+    path = (data.get("path") or "").strip().strip('"')
+    if not path:
+        return jsonify({"error": "empty path"}), 400
+    if not os.path.isfile(path):
+        return jsonify({"error": f"File not found: {path}"}), 400
+    return jsonify({"path": path, "name": os.path.basename(path)})
+
+
 @app.route("/probe", methods=["POST"])
 def probe():
     """Run ffprobe on a file and return basic info (duration, streams)."""
@@ -171,4 +183,4 @@ if __name__ == "__main__":
     print("ffmpeg found on PATH:", ffmpeg_available())
     print("Open http://127.0.0.1:5000 in your browser")
     print("=" * 60)
-    app.run(debug=False, port=5000)
+    app.run(debug=False, port=5000, threaded=True)
