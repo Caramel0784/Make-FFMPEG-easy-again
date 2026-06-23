@@ -50,7 +50,8 @@ async function uploadFile(inputEl) {
   if (data.error) throw new Error(data.error);
   return data.path; // absolute path on server
 }
-
+function gVcodec() { return document.getElementById("g_vcodec").value; }
+function gAcodec() { return document.getElementById("g_acodec").value; }
 async function newOutput(ext) {
   const res = await fetch(`/new_output/${ext}`);
   return await res.json(); // {path, filename}
@@ -136,7 +137,7 @@ async function trimRun() {
     if (reencode) {
       args = ["-i", inPath, "-ss", start];
       if (end) args.push("-to", end);
-      args.push("-c:v", "libx264", "-c:a", "aac", outPath);
+      args.push("-c:v", "gVcodec()", "-c:a", "gAcodec()", outPath);
     } else {
       args = ["-ss", start, "-i", inPath];
       if (end) args.push("-to", end);
@@ -194,7 +195,7 @@ async function mergeRun() {
       for (let i = 0; i < mergeFiles.length; i++) filter += `[${i}:v:0][${i}:a:0]`;
       filter += `concat=n=${mergeFiles.length}:v=1:a=1[outv][outa]`;
       args.push("-filter_complex", filter, "-map", "[outv]", "-map", "[outa]",
-        "-c:v", "libx264", "-c:a", "aac", outPath);
+        "-c:v", "gVcodec()", "-c:a", "gAcodec()", outPath);
       runFfmpeg(args, filename);
     }
   } catch (e) { showLog("Error: " + e.message); }
@@ -211,11 +212,11 @@ async function avRun() {
     let args;
     if (mode === "replace") {
       args = ["-i", videoPath, "-i", audioPath, "-map", "0:v:0", "-map", "1:a:0",
-        "-c:v", "copy", "-c:a", "aac"];
+        "-c:v", "copy", "-c:a", "gAcodec()"];
     } else {
       args = ["-i", videoPath, "-i", audioPath,
         "-filter_complex", "[0:a][1:a]amix=inputs=2:duration=longest[a]",
-        "-map", "0:v:0", "-map", "[a]", "-c:v", "copy", "-c:a", "aac"];
+        "-map", "0:v:0", "-map", "[a]", "-c:v", "copy", "-c:a", "gAcodec()"];
     }
     if (shortest) args.push("-shortest");
     args.push(outPath);
@@ -229,7 +230,7 @@ async function extractRun() {
     const inPath = await resolvePath(document.getElementById("ext_file"));
     const fmt = document.getElementById("ext_format").value;
     const { path: outPath, filename } = await newOutput(fmt);
-    const codec = fmt === "mp3" ? "libmp3lame" : fmt === "aac" ? "aac" : fmt === "flac" ? "flac" : fmt === "ogg" ? "libvorbis" : "pcm_s16le";
+    const codec = fmt === "mp3" ? "libmp3lame" : fmt === "gAcodec()" ? "gAcodec()" : fmt === "flac" ? "flac" : fmt === "ogg" ? "libvorbis" : "pcm_s16le";
     const args = ["-i", inPath, "-vn", "-acodec", codec, outPath];
     runFfmpeg(args, filename);
   } catch (e) { showLog("Error: " + e.message); }
@@ -255,7 +256,7 @@ async function compressRun() {
     const { path: outPath, filename } = await newOutput("mp4");
     const args = ["-i", inPath];
     if (scale) args.push("-vf", `scale=${scale}`);
-    args.push("-c:v", "libx264", "-crf", crf, "-preset", "medium", "-c:a", "aac", "-b:a", "128k", outPath);
+    args.push("-c:v", "gVcodec()", "-crf", crf, "-preset", "medium", "-c:a", "gAcodec()", "-b:a", "128k", outPath);
     runFfmpeg(args, filename);
   } catch (e) { showLog("Error: " + e.message); }
 }
@@ -287,7 +288,7 @@ async function speedRun() {
     } else {
       args.push("-vf", vFilter, "-an");
     }
-    args.push("-c:v", "libx264", "-c:a", "aac", outPath);
+    args.push("-c:v", "gVcodec()", "-c:a", "gAcodec()", outPath);
     runFfmpeg(args, filename);
   } catch (e) { showLog("Error: " + e.message); }
 }
@@ -376,8 +377,9 @@ async function mixTracksRun() {
     for (let i = 0; i < count; i++) inputs += `[0:a:${i}]`;
     const filter = `${inputs}amix=inputs=${count}:normalize=${normalize}[a]`;
 
+    const vcodec = document.getElementById("mix_vcodec").value;
     const args = ["-i", inPath, "-filter_complex", filter,
-      "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", outPath];
+      "-map", "0:v", "-map", "[a]", "-c:v", vcodec, "-c:a", "gAcodec()", outPath];
     runFfmpeg(args, filename);
   } catch (e) { showLog("Error: " + e.message); }
 }
