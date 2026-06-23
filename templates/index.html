@@ -26,6 +26,7 @@
   <button class="tab-btn" data-tab="gif">Video → GIF</button>
   <button class="tab-btn" data-tab="thumb">Screenshot</button>
   <button class="tab-btn" data-tab="subs">Add Subtitles</button>
+  <button class="tab-btn" data-tab="mixtracks">Mix Audio Tracks</button>
   <button class="tab-btn" data-tab="custom">Custom Command</button>
 </nav>
 
@@ -195,6 +196,28 @@
       </select>
     </div>
     <button class="run-btn" onclick="subsRun()">💬 Add Subtitles</button>
+  </section>
+
+<!-- MIX TRACKS -->
+  <section class="panel" id="mixtracks">
+    <h2>Mix Internal Audio Tracks into One</h2>
+    <p class="hint">For files with multiple audio tracks already inside them (e.g. OBS recordings with separate mic/system/discord tracks). Mixes them down to a single track.</p>
+    <div class="row"><label>Video/recording file</label><input type="file" id="mix_file"></div>
+    <div class="row"><label>Number of audio tracks to mix</label>
+      <input type="number" id="mix_count" min="2" max="8" value="3" onchange="renderMixTrackList()" oninput="renderMixTrackList()">
+    </div>
+    <div id="mix_track_list" class="hint"></div>
+    <div class="row"><label><input type="checkbox" id="mix_normalize"> Normalize volume (auto-lower to avoid clipping; uncheck to keep original loudness)</label></div>
+    <div class="row"><label>Video codec</label>
+      <select id="mix_vcodec">
+        <option value="copy">Copy (no re-encode — fastest, keeps original AV1/HEVC/etc.)</option>
+        <option value="libx264">x264 (H.264)</option>
+        <option value="libx265">x265 (HEVC)</option>
+        <option value="libvpx-vp9">VP9</option>
+        <option value="libaom-av1">AV1</option>
+      </select>
+    </div>
+    <button class="run-btn" onclick="mixTracksRun()">🎚️ Mix Tracks</button>
   </section>
 
   <!-- CUSTOM -->
