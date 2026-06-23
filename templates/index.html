@@ -32,7 +32,7 @@
     <option value="libopus">Opus</option>
   </select>
 </div>
-  
+
 <nav id="tabs">
   <button class="tab-btn active" data-tab="trim">Trim / Cut</button>
   <button class="tab-btn" data-tab="merge">Merge Clips</button>
@@ -227,6 +227,15 @@
     </div>
     <div id="mix_track_list" class="hint"></div>
     <div class="row"><label><input type="checkbox" id="mix_normalize"> Normalize volume (auto-lower to avoid clipping; uncheck to keep original loudness)</label></div>
+    <div class="row"><label>Video codec</label>
+      <select id="mix_vcodec">
+        <option value="copy">Copy (no re-encode — fastest, keeps original AV1/HEVC/etc.)</option>
+        <option value="libx264">x264 (H.264)</option>
+        <option value="libx265">x265 (HEVC)</option>
+        <option value="libvpx-vp9">VP9</option>
+        <option value="libaom-av1">AV1</option>
+      </select>
+    </div>
     <button class="run-btn" onclick="mixTracksRun()">🎚️ Mix Tracks</button>
   </section>
 
