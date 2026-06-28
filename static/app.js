@@ -9,21 +9,33 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
 });
 
 // ---------- Local path mode (no upload needed) ----------
-// Auto-inject a "or paste local file path" field under every <input type=file>
 document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll('input[type=file]').forEach(fileInput => {
     const wrap = document.createElement("div");
     wrap.className = "path-alt";
     wrap.innerHTML = `
-      <div class="path-alt-divider">or paste a full file path (skips uploading):</div>
-      <input type="text" class="path-text" placeholder="C:\\Videos\\clip.mp4">`;
+      <div class="path-alt-divider">or pick a file directly (no upload):</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="text" class="path-text" placeholder="C:\\Videos\\clip.mp4" style="flex:1">
+        <button class="small-btn" onclick="browseFile(this.closest('.path-alt').previousElementSibling)">📁 Browse</button>
+      </div>`;
     fileInput.insertAdjacentElement("afterend", wrap);
   });
 });
 
-// Resolve a file input to a usable server-side path:
-// - if its paired "path-text" field has a value, validate it via /check_path (no copy)
-// - otherwise upload the chosen file
+async function browseFile(inputEl) {
+  const res = await fetch("/browse", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ multiple: false })
+  });
+  const data = await res.json();
+  if (data.error) { showLog("Error: " + data.error); return; }
+  if (!data.path) return;
+  const pathField = inputEl.parentElement.querySelector(".path-text");
+  if (pathField) pathField.value = data.path;
+}
+
+// ---------- Resolve file (path input or upload) ----------
 async function resolvePath(inputEl) {
   const pathField = inputEl.parentElement.querySelector(".path-text");
   const typedPath = pathField ? pathField.value.trim() : "";
@@ -48,8 +60,10 @@ async function uploadFile(inputEl) {
   const res = await fetch("/upload", { method: "POST", body: fd });
   const data = await res.json();
   if (data.error) throw new Error(data.error);
-  return data.path; // absolute path on server
+  return data.path;
 }
+
+// ---------- Global codec helpers ----------
 function gVcodec() { return document.getElementById("g_vcodec").value; }
 function gAcodec() { return document.getElementById("g_acodec").value; }
 
@@ -72,12 +86,12 @@ function updateCodecOptions() {
   ];
   const opts = enc === "gpu" ? gpu : cpu;
   vsel.innerHTML = opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join("");
-  // restore selection if still available
   if (opts.find(([v]) => v === current)) vsel.value = current;
 }
+
 async function newOutput(ext) {
   const res = await fetch(`/new_output/${ext}`);
-  return await res.json(); // {path, filename}
+  return await res.json();
 }
 
 // ---------- Console / job runner ----------
@@ -96,7 +110,6 @@ function setDownload(filename) {
   const area = document.getElementById("download_area");
   area.innerHTML = `<button class="run-btn" onclick="revealFile('${filename}')">📂 Open folder (${filename})</button>`;
 }
-
 async function revealFile(filename) {
   await fetch(`/reveal/${filename}`, { method: "POST" });
 }
@@ -209,10 +222,10 @@ async function mergeRun() {
       });
       const listData = await listRes.json();
       if (listData.error) throw new Error(listData.error);
-      const { list_path } = listData;
-      const args = ["-f", "concat", "-safe", "0", "-i", list_path, "-c", "copy", outPath];
+      const args = ["-f", "concat", "-safe", "0", "-i", listData.list_path, "-c", "copy", outPath];
       runFfmpeg(args, filename);
     } else {
+      // probe all files, use smallest resolution to avoid upscaling
       const probeResults = await Promise.all(mergeFiles.map(f =>
         fetch("/probe", {
           method: "POST", headers: { "Content-Type": "application/json" },
@@ -226,13 +239,13 @@ async function mergeRun() {
       }
       if (tw === Infinity) { tw = 1920; th = 1080; }
 
-      let args = [];
-      mergeFiles.forEach(f => { args.push("-i", f.path); });
       const allSameSize = probeResults.every(pd => {
         const vs = pd.streams?.find(s => s.codec_type === "video");
         return vs && vs.width === tw && vs.height === th;
       });
 
+      let args = [];
+      mergeFiles.forEach(f => { args.push("-i", f.path); });
       let filter = "";
       if (allSameSize) {
         for (let i = 0; i < mergeFiles.length; i++) filter += `[${i}:v:0][${i}:a:0]`;
@@ -323,7 +336,6 @@ async function speedRun() {
     const vFilter = `setpts=${(1 / speed).toFixed(4)}*PTS`;
     let args = ["-i", inPath];
     if (matchAudio) {
-      // atempo only supports 0.5-2.0 per filter, chain if needed
       let atempoChain = [];
       let remaining = speed;
       if (remaining < 0.5) {
@@ -424,11 +436,9 @@ async function mixTracksRun() {
     const count = parseInt(document.getElementById("mix_count").value) || 2;
     const normalize = document.getElementById("mix_normalize").checked ? 1 : 0;
     const { path: outPath, filename } = await newOutput("mp4");
-
     let inputs = "";
     for (let i = 0; i < count; i++) inputs += `[0:a:${i}]`;
     const filter = `${inputs}amix=inputs=${count}:normalize=${normalize}[a]`;
-
     const vcodec = document.getElementById("mix_vcodec").value;
     const args = ["-i", inPath, "-filter_complex", filter,
       "-map", "0:v", "-map", "[a]", "-c:v", vcodec, "-c:a", gAcodec(), outPath];
