@@ -42,8 +42,7 @@ you'll pick up the command-line syntax too.
 
 4. Open your browser to **http://127.0.0.1:5000**
 
-=======
-# Auto
+# Auto Setup
 - **open run.bat**
 ## Notes
 - Uploaded files are saved into `uploads/`, results into `outputs/`. Both are
