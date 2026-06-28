@@ -11,7 +11,8 @@ import subprocess
 import uuid
 import shutil
 import json
-from flask import Flask, request, jsonify, send_from_directory, Response, render_template
+import platform
+from flask import Flask, request, jsonify, send_from_directory, render_template
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
@@ -22,7 +23,6 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = None  # no upload size limit
 
-# track running jobs: job_id -> dict(proc, log, status, output_file)
 JOBS = {}
 
 
@@ -56,7 +56,6 @@ def upload():
 
 
 def run_job(cmd_list):
-    """Start ffmpeg as a background job, return job_id."""
     job_id = uuid.uuid4().hex
     log_path = os.path.join(OUTPUT_DIR, f"{job_id}.log")
 
@@ -86,7 +85,6 @@ def run_job(cmd_list):
 
 @app.route("/run", methods=["POST"])
 def run():
-    """Accepts a JSON body: {cmd: [list of args after 'ffmpeg'], output_ext: 'mp4'}"""
     if not ffmpeg_available():
         return jsonify({"error": "ffmpeg not found on PATH. Install it first."}), 400
     data = request.get_json(force=True)
@@ -119,11 +117,8 @@ def cancel(job_id):
     return jsonify({"ok": True})
 
 
-import platform
-
 @app.route("/reveal/<path:filename>", methods=["POST"])
 def reveal(filename):
-    """Open the system file explorer and highlight the output file (no copying)."""
     full_path = os.path.join(OUTPUT_DIR, filename)
     if not os.path.exists(full_path):
         return jsonify({"error": "file not found"}), 404
@@ -147,43 +142,67 @@ def get_upload(filename):
 
 @app.route("/new_output/<ext>")
 def new_output(ext):
-    """Reserve an output filename for a given extension, return path + url."""
     p = out_path(ext)
     return jsonify({"path": p, "filename": os.path.basename(p)})
 
 
 @app.route("/check_path", methods=["POST"])
 def check_path():
-    """Validate that a locally-typed file path exists, without copying it."""
-    data = request.get_json(force=True)
-    path = (data.get("path") or "").strip().strip('"')
-    if not path:
-        return jsonify({"error": "empty path"}), 400
-    if not os.path.isfile(path):
-        return jsonify({"error": f"File not found: {path}"}), 400
-    return jsonify({"path": path, "name": os.path.basename(path)})
+    try:
+        data = request.get_json(force=True)
+        path = (data.get("path") or "").strip().strip('"')
+        if not path:
+            return jsonify({"error": "empty path"}), 400
+        if not os.path.isfile(path):
+            return jsonify({"error": f"File not found: {path}"}), 400
+        return jsonify({"path": path, "name": os.path.basename(path)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/probe", methods=["POST"])
 def probe():
-    """Run ffprobe on a file and return basic info (duration, streams)."""
-    data = request.get_json(force=True)
-    path = data.get("path")
-    if not path or not os.path.exists(path):
-        return jsonify({"error": "file not found"}), 400
-    if not shutil.which("ffprobe"):
-        return jsonify({"error": "ffprobe not found on PATH"}), 400
-    cmd = ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", path]
     try:
+        data = request.get_json(force=True)
+        path = data.get("path")
+        if not path or not os.path.exists(path):
+            return jsonify({"error": "file not found"}), 400
+        if not shutil.which("ffprobe"):
+            return jsonify({"error": "ffprobe not found on PATH"}), 400
+        cmd = ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", path]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         return jsonify(json.loads(result.stdout))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/browse", methods=["POST"])
+def browse():
+    try:
+        data = request.get_json(force=True)
+        multiple = data.get("multiple", False)
+        ps_script = """
+Add-Type -AssemblyName System.Windows.Forms
+$f = New-Object System.Windows.Forms.OpenFileDialog
+$f.Filter = 'All Files (*.*)|*.*'
+$f.Multiselect = $multiselect
+[void][System.Windows.Forms.Application]::EnableVisualStyles()
+if ($f.ShowDialog() -eq 'OK') { $f.FileNames -join '|' }
+""".replace("$multiselect", "$true" if multiple else "$false")
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps_script],
+            capture_output=True, text=True, timeout=60
+        )
+        paths = [p for p in result.stdout.strip().split("|") if p]
+        if multiple:
+            return jsonify({"paths": paths})
+        return jsonify({"path": paths[0] if paths else ""})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/concat_list", methods=["POST"])
 def concat_list():
-    """Write an ffmpeg concat-demuxer list file from a list of absolute paths."""
     try:
         data = request.get_json(force=True)
         paths = data.get("paths", [])
