@@ -76,6 +76,26 @@
     <button class="small-btn" onclick="addToMergeList()">+ Add to list</button>
     <ol id="merge_list" class="file-list"></ol>
     <div class="row"><label><input type="checkbox" id="merge_reencode" checked> Re-encode (safer if clips differ in codec/resolution/fps)</label></div>
+    <div id="merge_options" class="row two-col">
+      <div><label>Target Resolution</label>
+        <select id="merge_res">
+          <option value="auto">Auto (smallest in list)</option>
+          <option value="3840:2160">4K (3840x2160)</option>
+          <option value="2560:1440">1440p (2560x1440)</option>
+          <option value="1920:1080">1080p (1920x1080)</option>
+          <option value="1280:720">720p (1280x720)</option>
+          <option value="854:480">480p (854x480)</option>
+        </select>
+      </div>
+      <div><label>Target FPS</label>
+        <select id="merge_fps">
+          <option value="auto">Auto (from first file)</option>
+          <option value="60">60 fps</option>
+          <option value="30">30 fps</option>
+          <option value="24">24 fps</option>
+        </select>
+      </div>
+    </div>
     <button class="run-btn" onclick="mergeRun()">🔗 Merge Clips</button>
   </section>
 

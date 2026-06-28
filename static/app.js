@@ -210,6 +210,19 @@ function renderMergeList() {
     ol.appendChild(li);
   });
 }
+async function waitForJob(jobId) {
+  return new Promise((resolve, reject) => {
+    const timer = setInterval(async () => {
+      const res = await fetch(`/status/${jobId}`);
+      const data = await res.json();
+      showLog(data.log || "(working...)");
+      if (data.status === "done") { clearInterval(timer); resolve(); }
+      else if (data.status === "error" || data.status === "cancelled") {
+        clearInterval(timer); reject(new Error("Pre-process failed:\n" + data.log));
+      }
+    }, 800);
+  });
+}
 async function mergeRun() {
   try {
     if (mergeFiles.length < 2) throw new Error("Add at least 2 clips.");
@@ -225,46 +238,78 @@ async function mergeRun() {
       const args = ["-f", "concat", "-safe", "0", "-i", listData.list_path, "-c", "copy", outPath];
       runFfmpeg(args, filename);
     } else {
-      // probe all files, use smallest resolution to avoid upscaling
       const probeResults = await Promise.all(mergeFiles.map(f =>
         fetch("/probe", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ path: f.path })
         }).then(r => r.json())
       ));
-      let tw = Infinity, th = Infinity;
-      for (const pd of probeResults) {
-        const vs = pd.streams?.find(s => s.codec_type === "video");
-        if (vs) { tw = Math.min(tw, vs.width); th = Math.min(th, vs.height); }
-      }
-      if (tw === Infinity) { tw = 1920; th = 1080; }
 
-      const allSameSize = probeResults.every(pd => {
-        const vs = pd.streams?.find(s => s.codec_type === "video");
-        return vs && vs.width === tw && vs.height === th;
-      });
-
-      let args = [];
-      mergeFiles.forEach(f => { args.push("-i", f.path); });
-      let filter = "";
-      if (allSameSize) {
-        for (let i = 0; i < mergeFiles.length; i++) filter += `[${i}:v:0][${i}:a:0]`;
-        filter += `concat=n=${mergeFiles.length}:v=1:a=1[outv][outa]`;
-      } else {
-        for (let i = 0; i < mergeFiles.length; i++) {
-          filter += `[${i}:v:0]scale=${tw}:${th}:force_original_aspect_ratio=decrease,pad=${tw}:${th}:(ow-iw)/2:(oh-ih)/2,setsar=1[v${i}];`;
+      // target resolution
+      const resChoice = document.getElementById("merge_res").value;
+      let tw, th;
+      if (resChoice === "auto") {
+        tw = Infinity; th = Infinity;
+        for (const pd of probeResults) {
+          const vs = pd.streams?.find(s => s.codec_type === "video");
+          if (vs) { tw = Math.min(tw, vs.width); th = Math.min(th, vs.height); }
         }
-        for (let i = 0; i < mergeFiles.length; i++) filter += `[v${i}][${i}:a:0]`;
-        filter += `concat=n=${mergeFiles.length}:v=1:a=1[outv][outa]`;
+        if (tw === Infinity) { tw = 1920; th = 1080; }
+      } else {
+        [tw, th] = resChoice.split(":").map(Number);
       }
+
+      // target fps
+      const fpsChoice = document.getElementById("merge_fps").value;
+      let targetFps;
+      if (fpsChoice === "auto") {
+        const firstVs = probeResults[0]?.streams?.find(s => s.codec_type === "video");
+        const fpsStr = firstVs?.r_frame_rate || "60/1";
+        const [n, d] = fpsStr.split("/").map(Number);
+        targetFps = Math.round(n / d);
+      } else {
+        targetFps = parseInt(fpsChoice);
+      }
+
       const vcodec = gVcodec() === "copy" ? "libx264" : gVcodec();
       const acodec = gAcodec() === "copy" ? "aac" : gAcodec();
-      args.push("-filter_complex", filter, "-map", "[outv]", "-map", "[outa]",
-        "-c:v", vcodec, "-c:a", acodec, outPath);
+
+      // preprocess only files that don't match target
+      const finalPaths = [];
+      for (let i = 0; i < mergeFiles.length; i++) {
+        const vs = probeResults[i]?.streams?.find(s => s.codec_type === "video");
+        const fpsStr = vs?.r_frame_rate || "0/1";
+        const [n, d] = fpsStr.split("/").map(Number);
+        const fileFps = Math.round(n / d);
+        const needsEncode = !vs || vs.width !== tw || vs.height !== th || fileFps !== targetFps;
+
+        if (!needsEncode) {
+          showLog(`File ${i+1}/${mergeFiles.length}: OK — skipping re-encode`);
+          finalPaths.push(mergeFiles[i].path);
+        } else {
+          showLog(`File ${i+1}/${mergeFiles.length}: Re-encoding to ${tw}x${th} @ ${targetFps}fps...`);
+          const res = await fetch("/preprocess", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path: mergeFiles[i].path, width: tw, height: th, fps: targetFps, vcodec, acodec })
+          });
+          const data = await res.json();
+          if (data.error) throw new Error(data.error);
+          await waitForJob(data.job_id);
+          finalPaths.push(data.output_path);
+        }
+      }
+
+      // concat all with copy (all same specs now)
+      const listRes = await fetch("/concat_list", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paths: finalPaths })
+      });
+      const listData = await listRes.json();
+      if (listData.error) throw new Error(listData.error);
+      showLog("Concatenating...");
+      const args = ["-f", "concat", "-safe", "0", "-i", listData.list_path, "-c", "copy", outPath];
       runFfmpeg(args, filename);
     }
-  } catch (e) { showLog("Error: " + e.message); }
-}
 
 // ---------- MERGE AUDIO + VIDEO ----------
 async function avRun() {
