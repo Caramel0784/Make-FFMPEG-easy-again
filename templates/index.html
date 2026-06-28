@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FFmpeg GUI</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>🎬 FFmpeg GUI</h1>
+  <p class="sub">A friendly face for ffmpeg — runs locally, nothing leaves your machine.</p>
+  {% if not ffmpeg_ok %}
+  <div class="warn">⚠️ ffmpeg was not found on your PATH. Install it from ffmpeg.org and restart this app.</div>
+  {% endif %}
+</header>
+
+<div id="global_options">
+  <label>Encoder</label>
+  <select id="g_encoder" onchange="updateCodecOptions()">
+    <option value="cpu">CPU</option>
+    <option value="gpu">GPU (NVIDIA NVENC)</option>
+  </select>
+  <label>Video Codec</label>
+  <select id="g_vcodec">
+    <option value="copy">Copy (no re-encode)</option>
+    <option value="libx264">H.264 (x264)</option>
+    <option value="libx265">HEVC (x265)</option>
+    <option value="libvpx-vp9">VP9</option>
+    <option value="libaom-av1">AV1</option>
+  </select>
+  <label>Audio Codec</label>
+  <select id="g_acodec">
+    <option value="aac">AAC</option>
+    <option value="copy">Copy</option>
+    <option value="mp3">MP3</option>
+    <option value="flac">FLAC</option>
+    <option value="libopus">Opus</option>
+  </select>
+</div>
+
+<nav id="tabs">
+  <button class="tab-btn active" data-tab="trim">Trim / Cut</button>
+  <button class="tab-btn" data-tab="merge">Merge Clips</button>
+  <button class="tab-btn" data-tab="mergeav">Merge Audio+Video</button>
+  <button class="tab-btn" data-tab="extract">Extract Audio</button>
+  <button class="tab-btn" data-tab="convert">Convert Format</button>
+  <button class="tab-btn" data-tab="compress">Compress / Resize</button>
+  <button class="tab-btn" data-tab="speed">Speed Change</button>
+  <button class="tab-btn" data-tab="rotate">Rotate / Flip</button>
+  <button class="tab-btn" data-tab="gif">Video → GIF</button>
+  <button class="tab-btn" data-tab="thumb">Screenshot</button>
+  <button class="tab-btn" data-tab="subs">Add Subtitles</button>
+  <button class="tab-btn" data-tab="mixtracks">Mix Audio Tracks</button>
+  <button class="tab-btn" data-tab="custom">Custom Command</button>
+</nav>
+
+<main>
+
+  <!-- TRIM -->
+  <section class="panel active" id="trim">
+    <h2>Trim / Cut a clip</h2>
+    <div class="row"><label>Video file</label><input type="file" id="trim_file"></div>
+    <div class="row two-col">
+      <div><label>Start time (HH:MM:SS)</label><input type="text" id="trim_start" placeholder="00:00:00" value="00:00:00"></div>
+      <div><label>End time (HH:MM:SS)</label><input type="text" id="trim_end" placeholder="00:00:30"></div>
+    </div>
+    <div class="row"><label><input type="checkbox" id="trim_reencode"> Re-encode (slower, but accurate cut at exact frame). Unchecked = instant lossless cut on keyframes.</label></div>
+    <button class="run-btn" onclick="trimRun()">✂️ Cut</button>
+  </section>
+
+  <!-- MERGE VIDEO CLIPS -->
+  <section class="panel" id="merge">
+    <h2>Merge / Concatenate clips (clip1 + clip2 + ...)</h2>
+    <p class="hint">Add clips in the order you want them joined. Works best when clips share the same resolution/codec.</p>
+    <div class="row"><label>Add video file</label><input type="file" id="merge_file"></div>
+    <button class="small-btn" onclick="addToMergeList()">+ Add to list</button>
+    <ol id="merge_list" class="file-list"></ol>
+    <div class="row"><label><input type="checkbox" id="merge_reencode" checked> Re-encode (safer if clips differ in codec/resolution/fps)</label></div>
+    <button class="run-btn" onclick="mergeRun()">🔗 Merge Clips</button>
+  </section>
+
+  <!-- MERGE AUDIO+VIDEO -->
+  <section class="panel" id="mergeav">
+    <h2>Merge Audio + Video</h2>
+    <p class="hint">Replace or add an audio track to a video. Great for dubbing, music overlay, narration.</p>
+    <div class="row"><label>Video file</label><input type="file" id="av_video"></div>
+    <div class="row"><label>Audio file</label><input type="file" id="av_audio"></div>
+    <div class="row">
+      <label>Mode</label>
+      <select id="av_mode">
+        <option value="replace">Replace video's audio entirely</option>
+        <option value="mix">Mix new audio with existing audio</option>
+      </select>
+    </div>
+    <div class="row"><label><input type="checkbox" id="av_shortest" checked> Stop at the shorter of the two</label></div>
+    <button class="run-btn" onclick="avRun()">🎵 Merge Audio + Video</button>
+  </section>
+
+  <!-- EXTRACT AUDIO -->
+  <section class="panel" id="extract">
+    <h2>Extract Audio from Video</h2>
+    <div class="row"><label>Video file</label><input type="file" id="ext_file"></div>
+    <div class="row"><label>Output format</label>
+      <select id="ext_format">
+        <option value="mp3">mp3</option>
+        <option value="wav">wav</option>
+        <option value="aac">aac</option>
+        <option value="flac">flac</option>
+        <option value="ogg">ogg</option>
+      </select>
+    </div>
+    <button class="run-btn" onclick="extractRun()">🎧 Extract Audio</button>
+  </section>
+
+  <!-- CONVERT -->
+  <section class="panel" id="convert">
+    <h2>Convert Format</h2>
+    <div class="row"><label>File (video or audio)</label><input type="file" id="conv_file"></div>
+    <div class="row"><label>Convert to</label>
+      <select id="conv_format">
+        <optgroup label="Video">
+          <option value="mp4">mp4</option>
+          <option value="mkv">mkv</option>
+          <option value="webm">webm</option>
+          <option value="mov">mov</option>
+          <option value="avi">avi</option>
+        </optgroup>
+        <optgroup label="Audio">
+          <option value="mp3">mp3</option>
+          <option value="wav">wav</option>
+          <option value="flac">flac</option>
+        </optgroup>
+      </select>
+    </div>
+    <button class="run-btn" onclick="convertRun()">🔄 Convert</button>
+  </section>
+
+  <!-- COMPRESS / RESIZE -->
+  <section class="panel" id="compress">
+    <h2>Compress / Resize Video</h2>
+    <div class="row"><label>Video file</label><input type="file" id="comp_file"></div>
+    <div class="row two-col">
+      <div><label>Quality (CRF, lower = better quality/bigger file)</label>
+        <input type="range" id="comp_crf" min="18" max="35" value="26" oninput="document.getElementById('crf_val').textContent=this.value">
+        <span id="crf_val">26</span>
+      </div>
+      <div><label>Resize to</label>
+        <select id="comp_scale">
+          <option value="">Keep original size</option>
+          <option value="1920:-2">1080p (1920 wide)</option>
+          <option value="1280:-2">720p (1280 wide)</option>
+          <option value="854:-2">480p (854 wide)</option>
+          <option value="640:-2">360p (640 wide)</option>
+        </select>
+      </div>
+    </div>
+    <button class="run-btn" onclick="compressRun()">📉 Compress</button>
+  </section>
+
+  <!-- SPEED -->
+  <section class="panel" id="speed">
+    <h2>Change Speed</h2>
+    <div class="row"><label>Video file</label><input type="file" id="spd_file"></div>
+    <div class="row"><label>Speed multiplier</label>
+      <input type="range" id="spd_val" min="0.25" max="4" step="0.25" value="1" oninput="document.getElementById('spd_show').textContent=this.value+'x'">
+      <span id="spd_show">1x</span>
+    </div>
+    <div class="row"><label><input type="checkbox" id="spd_audio" checked> Also adjust audio pitch/speed to match</label></div>
+    <button class="run-btn" onclick="speedRun()">⏩ Change Speed</button>
+  </section>
+
+  <!-- ROTATE -->
+  <section class="panel" id="rotate">
+    <h2>Rotate / Flip</h2>
+    <div class="row"><label>Video file</label><input type="file" id="rot_file"></div>
+    <div class="row"><label>Action</label>
+      <select id="rot_action">
+        <option value="90cw">Rotate 90° clockwise</option>
+        <option value="90ccw">Rotate 90° counter-clockwise</option>
+        <option value="180">Rotate 180°</option>
+        <option value="hflip">Flip horizontal (mirror)</option>
+        <option value="vflip">Flip vertical</option>
+      </select>
+    </div>
+    <button class="run-btn" onclick="rotateRun()">🔁 Apply</button>
+  </section>
+
+  <!-- GIF -->
+  <section class="panel" id="gif">
+    <h2>Video → GIF</h2>
+    <div class="row"><label>Video file</label><input type="file" id="gif_file"></div>
+    <div class="row two-col">
+      <div><label>Start time</label><input type="text" id="gif_start" value="00:00:00"></div>
+      <div><label>Duration (seconds)</label><input type="text" id="gif_dur" value="3"></div>
+    </div>
+    <div class="row two-col">
+      <div><label>Width (px)</label><input type="number" id="gif_width" value="480"></div>
+      <div><label>FPS</label><input type="number" id="gif_fps" value="12"></div>
+    </div>
+    <button class="run-btn" onclick="gifRun()">🖼️ Make GIF</button>
+  </section>
+
+  <!-- SCREENSHOT -->
+  <section class="panel" id="thumb">
+    <h2>Screenshot / Thumbnail</h2>
+    <div class="row"><label>Video file</label><input type="file" id="thumb_file"></div>
+    <div class="row"><label>Time (HH:MM:SS)</label><input type="text" id="thumb_time" value="00:00:01"></div>
+    <button class="run-btn" onclick="thumbRun()">📸 Capture Frame</button>
+  </section>
+
+  <!-- SUBS -->
+  <section class="panel" id="subs">
+    <h2>Add / Burn Subtitles</h2>
+    <div class="row"><label>Video file</label><input type="file" id="sub_video"></div>
+    <div class="row"><label>Subtitle file (.srt/.ass)</label><input type="file" id="sub_file"></div>
+    <div class="row"><label>Mode</label>
+      <select id="sub_mode">
+        <option value="burn">Burn into video (hardcoded, always visible)</option>
+        <option value="soft">Add as a selectable track (mkv only)</option>
+      </select>
+    </div>
+    <button class="run-btn" onclick="subsRun()">💬 Add Subtitles</button>
+  </section>
+
+<!-- MIX TRACKS -->
+  <section class="panel" id="mixtracks">
+    <h2>Mix Internal Audio Tracks into One</h2>
+    <p class="hint">For files with multiple audio tracks already inside them (e.g. OBS recordings with separate mic/system/discord tracks). Mixes them down to a single track.</p>
+    <div class="row"><label>Video/recording file</label><input type="file" id="mix_file"></div>
+    <div class="row"><label>Number of audio tracks to mix</label>
+      <input type="number" id="mix_count" min="2" max="8" value="3" onchange="renderMixTrackList()" oninput="renderMixTrackList()">
+    </div>
+    <div id="mix_track_list" class="hint"></div>
+    <div class="row"><label><input type="checkbox" id="mix_normalize"> Normalize volume (auto-lower to avoid clipping; uncheck to keep original loudness)</label></div>
+    <div class="row"><label>Video codec</label>
+      <select id="mix_vcodec">
+        <option value="copy">Copy (no re-encode — fastest, keeps original AV1/HEVC/etc.)</option>
+        <option value="libx264">x264 (H.264)</option>
+        <option value="libx265">x265 (HEVC)</option>
+        <option value="libvpx-vp9">VP9</option>
+        <option value="libaom-av1">AV1</option>
+      </select>
+    </div>
+    <button class="run-btn" onclick="mixTracksRun()">🎚️ Mix Tracks</button>
+  </section>
+
+  <!-- CUSTOM -->
+  <section class="panel" id="custom">
+    <h2>Custom Command</h2>
+    <p class="hint">For anything not covered above. Type ffmpeg arguments as you would on the command line (without the word "ffmpeg" itself). Use <code>{IN}</code> and <code>{IN2}</code> as placeholders for uploaded files, and <code>{OUT}</code> for the output. Example:<br>
+    <code>-i {IN} -vf "eq=brightness=0.1" {OUT}</code></p>
+    <div class="row"><label>File 1</label><input type="file" id="cust_file1"></div>
+    <div class="row"><label>File 2 (optional)</label><input type="file" id="cust_file2"></div>
+    <div class="row"><label>Output extension</label><input type="text" id="cust_ext" value="mp4"></div>
+    <div class="row"><label>Arguments</label>
+      <textarea id="cust_args" rows="3" placeholder='-i {IN} -vf "scale=1280:-2" {OUT}'></textarea>
+    </div>
+    <button class="run-btn" onclick="customRun()">⚡ Run Custom Command</button>
+  </section>
+
+</main>
+
+<div id="console">
+  <div id="console_header">
+    <strong>Command &amp; Progress</strong>
+    <button id="cancel_btn" onclick="cancelJob()" style="display:none;">Cancel</button>
+  </div>
+  <pre id="cmd_preview">Choose a tool above and hit run — the ffmpeg command will show here so you can learn it.</pre>
+  <pre id="log_output"></pre>
+  <div id="download_area"></div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
