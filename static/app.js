@@ -310,6 +310,8 @@ async function mergeRun() {
       const args = ["-f", "concat", "-safe", "0", "-i", listData.list_path, "-c", "copy", outPath];
       runFfmpeg(args, filename);
     }
+  } catch (e) { showLog("Error: " + e.message); }
+}
 
 // ---------- MERGE AUDIO + VIDEO ----------
 async function avRun() {
