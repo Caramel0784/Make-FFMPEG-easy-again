@@ -214,7 +214,25 @@ def concat_list():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
+@app.route("/preprocess", methods=["POST"])
+def preprocess():
+    """Re-encode a single file to match target specs."""
+    try:
+        data = request.get_json(force=True)
+        in_path = data.get("path")
+        tw = data.get("width", 1920)
+        th = data.get("height", 1080)
+        fps = data.get("fps", 60)
+        vcodec = data.get("vcodec", "libx264")
+        acodec = data.get("acodec", "aac")
+        output = out_path("mp4")
+        filter_str = f"fps={fps},scale={tw}:{th}:force_original_aspect_ratio=decrease,pad={tw}:{th}:(ow-iw)/2:(oh-ih)/2,setsar=1"
+        cmd = ["ffmpeg", "-y", "-i", in_path, "-vf", filter_str, "-c:v", vcodec, "-c:a", acodec, output]
+        job_id = run_job(cmd)
+        return jsonify({"job_id": job_id, "output_path": output})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+        
 if __name__ == "__main__":
     print("=" * 60)
     print("FFmpeg GUI starting...")
